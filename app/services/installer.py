@@ -9,7 +9,7 @@ import urllib.request
 import uuid
 import zipfile
 from .common import digest, write_json, read_json
-from .environment import manifest, check
+from .environment import manifest, check, installed_versions, locked_versions
 from .processes import start_process, capture
 
 
@@ -145,22 +145,31 @@ class DependencyManager:
         runtime = self.root / "runtime"
         marker = self.root / "state/environment-installing.json"
         if runtime.exists() and not marker.exists():
-            if check(self.root, self.source, self.allow_cpu)["ready"]:
+            if check(self.root, self.source, self.allow_cpu, log=self.log)["ready"]:
                 self.log("Environment already ready; no installation needed")
                 return
             raise RuntimeError("Existing runtime preserved. Use a fresh portable folder for environment changes.")
         python = self.prepare_runtime(expected)
         write_json(marker, {"environment_version": expected["environment_version"], "phase": "dependencies"})
         cache = self.root / "cache/packages"
-        self.execute([python, "-I", "-m", "pip", "--isolated", "install", "--cache-dir", cache, "torch==" + expected["torch"], "torchvision==" + expected["torchvision"], "--index-url", expected["pytorch_index_url"]])
-        self.execute([python, "-I", "-m", "pip", "--isolated", "install", "--cache-dir", cache, "-r", self.source / "configs/requirements.lock"])
+        installed = installed_versions(self.root, self.source)
+        wanted = locked_versions(self.source)
+        if any(installed.get(name) != wanted[name] for name in ("torch", "torchvision")):
+            self.execute([python, "-I", "-m", "pip", "--isolated", "install", "--cache-dir", cache, "torch==" + expected["torch"], "torchvision==" + expected["torchvision"], "--index-url", expected["pytorch_index_url"]])
+        else:
+            self.log("PyTorch/torchvision already match; skipping download and installation")
+        # Refresh metadata after torch installation, which may resolve shared dependencies.
+        installed = installed_versions(self.root, self.source)
+        if any(installed.get(name) != value for name, value in wanted.items() if name not in ("torch", "torchvision")):
+            self.execute([python, "-I", "-m", "pip", "--isolated", "install", "--cache-dir", cache, "-r", self.source / "configs/requirements.lock"])
+        else:
+            self.log("GUI dependencies already match; skipping installation")
         self.log("Verifying environment and selected-device matrix multiply")
-        report = check(self.root, self.source, self.allow_cpu)
+        report = check(self.root, self.source, self.allow_cpu, log=self.log, self_test=True)
+        write_json(self.root / "state/environment-verification.json", report)
         if not report["ready"]:
-            raise RuntimeError("INSTALL FAILED: CUDA unavailable or version mismatch: " + json.dumps(report))
-        device = "cuda" if report["cuda_ready"] else "cpu"
-        self.log("Self test device: " + device + " (CPU permission: " + str(self.allow_cpu) + ")")
-        self.execute([python, "-I", "-c", f"import torch; x=torch.randn(64,64,device='{device}'); y=x@x; assert y.device.type=='{device}'; print(y.device)"])
+            raise RuntimeError("Environment verification incomplete: " + report.get("error", json.dumps(report)))
+        self.log("Self test passed on " + report["selected_device"])
         settings_path = self.root / "state/settings.json"
         settings = read_json(settings_path) if settings_path.exists() else {}
         settings["allow_cpu"] = self.allow_cpu

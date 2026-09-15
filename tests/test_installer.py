@@ -139,9 +139,46 @@ def test_dependencies_only_after_verification(tmp_path, monkeypatch):
         return service.root / "runtime/python.exe"
     monkeypatch.setattr(service, "prepare_runtime", prepare)
     monkeypatch.setattr(service, "execute", lambda cmd: calls.append(list(map(str,cmd))))
-    monkeypatch.setattr(module, "check", lambda *a: {"ready":True,"cuda_ready":True})
+    monkeypatch.setattr(module, "installed_versions", lambda *a: {})
+    monkeypatch.setattr(module, "check", lambda *a, **kw: {"ready":True,"cuda_ready":True,"selected_device":"cuda:0"})
     service.install()
     assert calls[0] == "verified"
     assert all(cmd[0] == str(service.root / "runtime/python.exe") for cmd in calls[1:])
     assert calls[1][1:5] == ["-I", "-m", "pip", "--isolated"]
     assert not (service.root / "state/environment-installing.json").exists()
+
+
+def test_retry_skips_all_installs_when_versions_match(tmp_path, monkeypatch):
+    import app.services.installer as module
+    service = manager(tmp_path)
+    write_json(service.root / "state/environment-installing.json", {"phase":"dependencies"})
+    monkeypatch.setattr(service, "prepare_runtime", lambda _: service.root / "runtime/python.exe")
+    monkeypatch.setattr(module, "installed_versions", lambda *a: module.locked_versions(ROOT))
+    monkeypatch.setattr(service, "execute", lambda *a: pytest.fail("No pip or second self-test process on verification retry"))
+    calls=[]
+    def check(*args, **kwargs):
+        calls.append(kwargs)
+        return {"ready":True, "selected_device":"cuda:0", "self_test":"passed"}
+    monkeypatch.setattr(module, "check", check)
+    service.install()
+    assert calls[0]["self_test"] is True
+    assert read_json(service.root / "state/environment-verification.json")["ready"]
+    assert not (service.root / "state/environment-installing.json").exists()
+
+
+def test_timeout_retains_installed_runtime_and_retry_marker(tmp_path, monkeypatch):
+    import app.services.installer as module
+    service = manager(tmp_path)
+    runtime=service.root / "runtime"
+    runtime.mkdir(parents=True)
+    (runtime / "keep.txt").write_text("installed")
+    write_json(service.root / "state/environment-installing.json", {})
+    monkeypatch.setattr(service, "prepare_runtime", lambda _: runtime / "python.exe")
+    monkeypatch.setattr(module, "installed_versions", lambda *a: module.locked_versions(ROOT))
+    monkeypatch.setattr(service, "execute", lambda *a: pytest.fail("Unexpected install"))
+    monkeypatch.setattr(module, "check", lambda *a, **kw: {"ready":False,"error_code":"verification_timeout","error":"Import timed out"})
+    with pytest.raises(RuntimeError, match="Import timed out"):
+        service.install()
+    assert (runtime / "keep.txt").read_text()=="installed"
+    assert (service.root / "state/environment-installing.json").exists()
+    assert read_json(service.root / "state/environment-verification.json")["error_code"]=="verification_timeout"

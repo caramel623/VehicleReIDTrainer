@@ -96,3 +96,9 @@ GitHub Actions 執行 Windows tests 並產生 update ZIP、manifest.json、SHA25
 進階診斷：`VehicleReIDTrainer.exe --prepare-runtime-only` 只建立並驗證 Python/pip，
 不下載 PyTorch、不執行 AI 運算；结果在 state/runtime-probe.json 和 logs/environment.log。
 此模式不會將完整訓練環境標示為 Ready；再次正常啟動仍會完成依賴安裝。
+
+## v0.1.2：套件已安裝但驗證超過 60 秒
+
+[原目錄修補步驟](docs/REPAIR_INSTALL.md)。提供 code-only repair ZIP，可保留 v0.1.1 已安裝的 runtime 與下載 cache。
+套件 metadata 版本相符就跳過安裝；完整匯入/裝置 self-test 改用單一子程序，最多 600 秒，
+持續顯示進度，逾時與真正的 CUDA/版本錯誤分開呈現。原環境 manifest 保持不變。

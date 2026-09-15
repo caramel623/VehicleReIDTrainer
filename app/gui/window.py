@@ -10,11 +10,13 @@ from updater.updater import latest, version
 
 class Worker(QThread):
     result = Signal(str)
-    def __init__(self, task):
-        super().__init__(); self.task = task
+    progress = Signal(str)
+    def __init__(self, task, report_progress=False):
+        super().__init__(); self.task = task; self.report_progress = report_progress
     def run(self):
         try:
-            self.result.emit(json.dumps(self.task(), ensure_ascii=False, indent=2))
+            value = self.task(self.progress.emit) if self.report_progress else self.task()
+            self.result.emit(json.dumps(value, ensure_ascii=False, indent=2))
         except Exception as error:
             self.result.emit("FAILED: " + str(error))
 
@@ -24,6 +26,7 @@ class Window(QMainWindow):
         super().__init__()
         self.root, self.source, self.workers = root, source, []
         self.job = TrainingJob(root, source)
+        self.env_check_active = False
         self.setWindowTitle("VehicleReIDTrainer " + (source / "VERSION").read_text().strip())
         self.resize(1060, 720)
         holder = QWidget(); self.setCentralWidget(holder); layout = QHBoxLayout(holder)
@@ -72,23 +75,49 @@ class Window(QMainWindow):
     def button(self, page, label, action):
         button = QPushButton(label); button.clicked.connect(action); self.pages[page].addWidget(button); return button
 
-    def background(self, task, output, after=None):
-        worker = Worker(task); self.workers.append(worker)
+    def background(self, task, output, after=None, progress=False):
+        worker = Worker(task, report_progress=progress); self.workers.append(worker)
         worker.result.connect(output.setPlainText)
+        worker.progress.connect(output.appendPlainText)
         if after: worker.result.connect(after)
         worker.finished.connect(lambda: self.workers.remove(worker))
         worker.start()
 
     def check_environment(self):
+        if self.env_check_active:
+            return
+        self.env_check_active = True
+        self.start_button.setEnabled(False)
+        self.env_output.setPlainText("Checking environment; installed packages are preserved.")
+        self.dashboard.setText("Checking environment…")
         allow_cpu = self.allow_cpu.isChecked()
-        def task():
-            result = environment.check(self.root, self.source, allow_cpu); result["gpu"] = environment.gpu_info(); return result
+        def task(progress):
+            import logging
+            def emit(message):
+                progress(message)
+                logging.getLogger(__name__).info(message)
+            result = environment.check(self.root, self.source, allow_cpu, log=emit)
+            result["gpu"] = environment.gpu_info()
+            return result
         def done(text):
-            try: ready = json.loads(text).get("ready", False)
-            except ValueError: ready = False
+            self.env_check_active = False
+            if self.allow_cpu.isChecked() != allow_cpu:
+                self.check_environment()
+                return
+            try:
+                report = json.loads(text)
+            except ValueError:
+                report = {"ready": False, "error": text}
+            ready = report.get("ready", False)
             self.start_button.setEnabled(ready)
-            self.dashboard.setText(("Environment Ready · " + str(json.loads(text).get("selected_device", "cuda"))) if ready else "CUDA unavailable / environment incomplete — Training disabled (CPU requires explicit permission)")
-        self.background(task, self.env_output, done)
+            if ready:
+                message = "Environment Ready · " + str(report.get("selected_device", "cuda"))
+            elif report.get("error_code") == "verification_timeout":
+                message = "Environment verification timed out — Training disabled; retry verification"
+            else:
+                message = "Training disabled — " + report.get("error", "environment check incomplete")
+            self.dashboard.setText(message)
+        self.background(task, self.env_output, done, progress=True)
 
     def select_dataset(self):
         path = QFileDialog.getExistingDirectory(self, "Dataset")

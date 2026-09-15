@@ -53,3 +53,22 @@ SHA256/路徑/缺少執行檔等回歸測試。已建置的 EXE 在含空白路�
 交付：dist/VehicleReIDTrainer-bootstrap-v0.1.1-win64.zip。
 README 有新目錄解壓步驟。此版更動 launcher 與環境來源，不能用舊版 app-only updater 換版。
 GitHub Windows CI 已增加官方 runtime 整合測試；上一輪 CI 已確認成功。
+
+## v0.1.2：首次 PyTorch/torchvision 驗證逾時
+
+使用者紀錄確認 v0.1.1 的 Python、torch 2.7.1+cu126、torchvision 與 GUI 套件皆成功安裝，
+最後 import probe 在 60 秒被父程序終止。未取得原機 stack，無法判定匯入緩慢的底層原因，
+不可因此認定 GPU/CUDA 不可用。
+
+- 單一隔離子程序完成 torch/torchvision 匯入、CUDA 查詢與選定裝置 matrix multiply。
+- 總上限 600 秒；每 10 秒 heartbeat，子程序每 60 秒輸出 stack 診斷。
+- verification_timeout、verification_failed、dependency_mismatch、device_unavailable 分開呈現。
+- 安裝重試先讀 metadata；版本相符時跳過 pip，不下載也不重裝已完成的套件。
+- 結果保存 state/environment-verification.json，詳細訊息保留於 logs/environment.log。
+- GUI 檢查支援即時進度，避免並行重複檢查；逾時仍禁止訓練，CPU 仍需明確授權。
+- 提供 repair ZIP，只含 EXE、app、VERSION 和修補說明；不含 runtime/cache/state/configs。
+- Python、torch、torchvision 與 environment manifest 未變更。適用 v0.1.1 原目錄覆蓋修補。
+
+驗證：62 passed / 1 skipped（CUDA integration）。包含真實子程序等待進度、逾時後終止、
+PyTorch/torchvision CPU import 與 self-test、metadata inventory、安裝重試跳過 pip，以及既有 runtime 測試。
+未在使用者原機重現長時間匯入或執行完整 CUDA 驗收；新版診斷可定位若仍逾時的步驟。
