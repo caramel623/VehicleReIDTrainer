@@ -3,6 +3,7 @@ import json
 import subprocess
 import re
 from .common import read_json
+from .processes import capture
 
 
 class CUDARequiredError(RuntimeError):
@@ -40,7 +41,10 @@ def manifest(root: Path) -> dict:
             raise ValueError(f"Missing environment field: {key}")
     if value["pytorch_index_url"] != "https://download.pytorch.org/whl/cu126":
         raise ValueError("Unsupported CUDA index in Phase 1")
-    if len(value["python_sha256"]) != 64:
+    expected_url = f"https://api.nuget.org/v3-flatcontainer/python/{value['python']}/python.{value['python']}.nupkg"
+    if value.get("python_distribution") != "nuget" or value["python_url"] != expected_url:
+        raise ValueError("Use the verified official Python NuGet runtime manifest")
+    if not re.fullmatch(r"[0-9a-f]{64}", value["python_sha256"]):
         raise ValueError("Missing verified runtime hash")
     return value
 
@@ -57,13 +61,9 @@ def check(root: Path, source: Path, allow_cpu: bool = False) -> dict:
     try:
         expected = manifest(source)
         command = "import torch,torchvision,json,sys; print(json.dumps(dict(python='.'.join(map(str,sys.version_info[:3])),torch=torch.__version__,torchvision=torchvision.__version__,cuda=torch.version.cuda,available=torch.cuda.is_available())))"
-        result = subprocess.run([str(runtime_python(root)), "-I", "-c", command], capture_output=True, text=True, timeout=60)
-        if result.returncode:
-            raise RuntimeError(result.stderr[-2000:])
-        info = json.loads(result.stdout)
+        info = json.loads(capture([runtime_python(root), "-I", "-c", command]))
         dependency_code = "import importlib.metadata,json; print(json.dumps({n:importlib.metadata.version(n) for n in ['PySide6','Pillow','shiboken6','PySide6_Essentials','PySide6_Addons']}))"
-        dependencies = subprocess.run([str(runtime_python(root)), "-I", "-c", dependency_code], capture_output=True, text=True, timeout=30, check=True)
-        installed = json.loads(dependencies.stdout)
+        installed = json.loads(capture([runtime_python(root), "-I", "-c", dependency_code], timeout=30))
         locked = dict(line.strip().split("==") for line in (source / "configs/requirements.lock").read_text().splitlines() if line.strip())
         info["dependencies_match"] = all(installed.get(name) == value for name, value in locked.items())
         try:

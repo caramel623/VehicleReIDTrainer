@@ -15,7 +15,9 @@
 
 Portable folder 需含 EXE、app/、updater/、configs/、VERSION。
 執行 EXE → Install Environment。首次畫面用 launcher 內建 Tk，runtime 完成後主程式為 PySide6。
-安裝 python.org 官方私有 Python（不變更 PATH），使用明確 `runtime/python.exe -m pip`。
+從官方 CPython NuGet 套件解壓建立私有 Python（不更動系統 Python、登錄或 PATH），
+SHA256 驗證 → staging → 驗證 interpreter/pip → 移至 runtime → 再驗證 → 安裝依賴。
+使用明確 `runtime/python.exe -I -m pip --isolated`。
 只在明確安裝時下載；一般啟動不執行 pip。版本由 environment.json 和 requirements.lock 固定。
 
 目前固定 Python 3.12.10、PyTorch 2.7.1+cu126 / torchvision 0.22.1+cu126，
@@ -23,7 +25,7 @@ Portable folder 需含 EXE、app/、updater/、configs/、VERSION。
 參考 [PyTorch 官方配對](https://pytorch.org/get-started/previous-versions/)、
 [Python 官方 Windows 安裝](https://docs.python.org/3.12/using/windows.html)、
 [NVIDIA CUDA 12.6 release notes](https://docs.nvidia.com/cuda/archive/12.6.0/cuda-toolkit-release-notes/index.html)。
-Python 安裝檔 SHA256 固定於 manifest，來自官方 HTTPS 下載。
+Python NuGet 套件 SHA256 固定於 manifest，來源見 [Python 官方 NuGet 說明](https://docs.python.org/3.12/using/windows.html#the-nuget-org-packages)。
 
 預設無 CUDA 會拒絕訓練。依使用者新要求，安裝精靈與 Settings 可明確勾選允許 CPU；
 允許後 CUDA 不可用才使用 CPU，實際裝置記錄於每個 run 的 device.json。版本錯誤仍拒絕執行。
@@ -78,3 +80,19 @@ $env:VEHICLE_REID_CUDA_TEST = '1'
 GitHub Actions 執行 Windows tests 並產生 update ZIP、manifest.json、SHA256SUMS；
 版本 tag 通過驗證才發佈 Release。Phase 1 不自動發佈未經 AI01 驗收的 bootstrap。
 原始需求 README.txt 僅留本機（包含部署內網資訊）；公開文件使用抽象路徑。
+
+## v0.1.1 安裝修正與換版
+
+修正舊版系統 installer 結束後未建立 runtime/python.exe、接著安裝 pip 套件出現 WinError 2 的問題。
+不再執行 Python 系統 installer；無需移除其他 Python。保留「CPU 需明確授權」規則。
+
+請將 **完整 v0.1.1 bootstrap ZIP** 解壓到新的資料夾，例如 `E:\VehicleReIDTrainer-0.1.1`，
+再執行該資料夾的 VehicleReIDTrainer.exe。不要只換 EXE：新版需要配套的 configs 和 app。
+舊資料夾及資料不需刪除。若沿用先前失敗的資料夾，需完整替換程式檔，保留 state 和 cache；
+安裝器會保留有失敗標記且缺少 python.exe 的 runtime 至 state/runtime-incomplete-*。
+若已存在但無法執行的 python.exe，程式保留原檔並停止，請採新的解壓目錄。
+
+此修正改變 environment manifest，舊版 app-only updater 會拒絕；必須使用 bootstrap。
+進階診斷：`VehicleReIDTrainer.exe --prepare-runtime-only` 只建立並驗證 Python/pip，
+不下載 PyTorch、不執行 AI 運算；结果在 state/runtime-probe.json 和 logs/environment.log。
+此模式不會將完整訓練環境標示為 Ready；再次正常啟動仍會完成依賴安裝。

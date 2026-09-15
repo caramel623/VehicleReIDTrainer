@@ -15,6 +15,13 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -r requirements-dev.txt
       - run: python -m pip install torch==2.7.1+cpu --index-url https://download.pytorch.org/whl/cpu
+      - name: Verify official managed runtime
+        shell: pwsh
+        run: |
+          python scripts/check_runtime_package.py
+          if ($LASTEXITCODE -ne 0) { throw 'Runtime download failed' }
+          $package = (Get-ChildItem cache/packages/*.nupkg | Select-Object -First 1).FullName
+          "VEHICLE_REID_RUNTIME_PACKAGE=$package" | Out-File -FilePath $env:GITHUB_ENV -Append
       - run: python -m pytest -q
       - run: python scripts/package_update.py
       - uses: actions/upload-artifact@v4

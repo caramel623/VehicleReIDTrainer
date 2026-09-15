@@ -18,6 +18,23 @@ def main():
         source = (root / relative).resolve()
         if not source.is_relative_to(root) or (source != root and source.parent != root / "releases"):
             raise ValueError("Invalid active release")
+    if "--prepare-runtime-only" in sys.argv[1:]:
+        sys.path.insert(0, str(source))
+        from app.services.installer import DependencyManager
+        from app.services.common import write_json
+        logs = root / "logs"
+        logs.mkdir(exist_ok=True)
+        with (logs / "environment.log").open("a", encoding="utf-8") as log:
+            def emit(message):
+                log.write(message + "\n"); log.flush()
+            try:
+                python = DependencyManager(root, source, emit).prepare_runtime()
+                write_json(root / "state/runtime-probe.json", {"ready": True, "python": str(python)})
+            except Exception as error:
+                emit("FAILED: " + str(error))
+                write_json(root / "state/runtime-probe.json", {"ready": False, "error": str(error)})
+                raise SystemExit(1)
+        return
     python = root / "runtime/python.exe"
     if not python.exists() or (root / "state/environment-installing.json").exists():
         # tkinter belongs to the small frozen launcher; GUI dependencies need not exist yet.
@@ -60,7 +77,9 @@ def main():
             window.after(100, poll)
         window.protocol("WM_DELETE_WINDOW", lambda: window.destroy() if str(button['state']) != 'disabled' else None)
         poll(); window.mainloop(); return
-    subprocess.Popen([str(python), "-m", "app.main", "--root", str(root)], cwd=source)
+    sys.path.insert(0, str(source))
+    from app.services.processes import start_process
+    start_process([str(python), "-E", "-s", "-m", "app.main", "--root", str(root)], cwd=source)
 
 
 if __name__ == "__main__":

@@ -115,7 +115,7 @@ class Window(QMainWindow):
             except (OSError, ValueError): pass
 
     def save_settings(self):
-        write_json(self.root / "state/settings.json", {"dataset_root": self.path.text(), "github_repository": self.repo.text(), "training_cache": str(self.root / "cache/datasets"), "model_directory": str(self.root / "models"), "runs_directory": str(self.root / "runs"), "update_channel": "stable", "gpu_device": 0, "environment_version": 1, "allow_cpu": self.allow_cpu.isChecked()})
+        write_json(self.root / "state/settings.json", {"dataset_root": self.path.text(), "github_repository": self.repo.text(), "training_cache": str(self.root / "cache/datasets"), "model_directory": str(self.root / "models"), "runs_directory": str(self.root / "runs"), "update_channel": "stable", "gpu_device": 0, "environment_version": environment.manifest(self.source)["environment_version"], "allow_cpu": self.allow_cpu.isChecked()})
 
     def permission_changed(self):
         self.save_settings()

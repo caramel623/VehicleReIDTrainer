@@ -1,11 +1,12 @@
 {
-  "environment_version": 1,
+  "environment_version": 2,
   "python": "3.12.10",
-  "python_url": "https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe",
-  "python_sha256": "67b5635e80ea51072b87941312d00ec8927c4db9ba18938f7ad2d27b328b95fb",
+  "python_url": "https://api.nuget.org/v3-flatcontainer/python/3.12.10/python.3.12.10.nupkg",
+  "python_sha256": "0eb85c2dfccccf1b17352de4c397f69194035b7d37149eacc16f1147d93de3b8",
   "torch": "2.7.1+cu126",
   "torchvision": "0.22.1+cu126",
   "pytorch_index_url": "https://download.pytorch.org/whl/cu126",
   "minimum_driver": "560.76",
-  "runtime_version": 1
+  "runtime_version": 2,
+  "python_distribution": "nuget"
 }
