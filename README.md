@@ -102,3 +102,9 @@ GitHub Actions 執行 Windows tests 並產生 update ZIP、manifest.json、SHA25
 [原目錄修補步驟](docs/REPAIR_INSTALL.md)。提供 code-only repair ZIP，可保留 v0.1.1 已安裝的 runtime 與下載 cache。
 套件 metadata 版本相符就跳過安裝；完整匯入/裝置 self-test 改用單一子程序，最多 600 秒，
 持續顯示進度，逾時與真正的 CUDA/版本錯誤分開呈現。原環境 manifest 保持不變。
+
+## v0.1.3：DatasetManager 格式與訓練狀態鎖檔
+
+支援上游 reid_crop/plate_mask_bbox/整數 manifest image_id；不把原圖 sha256 當裁切圖 hash。
+缺少 event_id 時回報未完成事件防洩漏檢查。Windows status.json 暫時占用會有限次重試；
+Runs 顯示最後的 train.log。可用 repair ZIP 覆蓋既有程式後 Resume smoke checkpoint。

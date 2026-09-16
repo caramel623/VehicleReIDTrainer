@@ -19,7 +19,7 @@
 - v0.1.1 已改用官方 NuGet 私有 runtime，實際 EXE 的 Python/pip 安裝與重試通過；完整 CUDA dependencies 與原部署機驗收仍待完成。
 - 更新 GUI 僅查詢。自動下載/退出/安裝/重啟、異環境 parallel runtime、migration 屬後續 Phase 4。
 - Phase 1 只允許相同完整環境 manifest/lock 的更新；變更則拒絕，保留舊 runtime。
-- 第一版資料契約尚未與 DatasetManager 實際 export schema 接軌；不可直接假設相容。
+- v0.1.3 已依 DatasetManager exporter 原始碼加入格式 adapter，以合成資料驗證；使用者實際完整資料集仍需原機 Validate。
 - 相鄰事件目前以 event_id 禁止跨 split；時間鄰近且不同 event_id 的規則仍待定義。
 - Dataset 統計尚未加入 camera/year，Run 曲線、進階設定與模型管理未完成。
 - Phase 2（backbone、sampler、CE+Triplet、正式 metrics）與 Phase 3 尚未開始。
@@ -72,3 +72,23 @@ GitHub Windows CI 已增加官方 runtime 整合測試；上一輪 CI 已確認�
 驗證：62 passed / 1 skipped（CUDA integration）。包含真實子程序等待進度、逾時後終止、
 PyTorch/torchvision CPU import 與 self-test、metadata inventory、安裝重試跳過 pip，以及既有 runtime 測試。
 未在使用者原機重現長時間匯入或執行完整 CUDA 驗收；新版診斷可定位若仍逾時的步驟。
+
+## v0.1.3：匯出格式與 status.json 存取被拒
+
+使用者提供 traceback 確認：RUNNING 寫入 status.json 的 os.replace 發生 WinError 5，
+隨後 FAILED 狀態寫入再次失敗。並非本次紀錄所顯示的模型 forward/backward 錯誤。
+實際占用檔案的程序未由 traceback 識別；處理暫時讀取/鎖檔，不擅自修改檔案權限。
+
+- 原子 replace 加入最多 8 次 PermissionError 重試（總退避 0.7 秒），持續失敗仍回報。
+- GUI 對 worker status 只讀，退出代碼與 train.log 尾端在畫面合併呈現。
+- Worker 先輸出/flush traceback，再嘗試寫 FAILED；補上逐步進度與 fault handler。
+- 同樣的 replace 重試用於 checkpoint；既有 last.pt 與 resume config 相容。
+- DatasetManager schema：reid_crop、plate_mask_bbox、整數 JSONL ID，保留舊 trainer schema。
+- 上游 sha256 指原始照片，不與 masked crop 誤比；crop 另計算 fingerprint。
+- CSV/manifest/split 的標籤與路徑比對、mask bbox/image decode 與 identity split 檢查保留。
+- 缺少 event_id 回報警告及 training_ready=false；不把未完成的事件防洩漏檢查當成通過。
+
+驗證：73 passed / 1 skipped（CUDA integration）。包括真實 Windows 讀取鎖釋放後成功寫入、
+持續鎖定保留舊 JSON、FAILED 寫入失敗仍保存 traceback，以及 20-step 訓練子程序與並行 status 讀取完成。
+DatasetManager 合成格式的 Validate/Prepare Cache 通過，source metadata 未修改。
+未使用或上傳私人照片/車輛資料；未更動 PhotoTraining 程式或資料庫。修補 ZIP 保留 runtime/cache/state/runs。

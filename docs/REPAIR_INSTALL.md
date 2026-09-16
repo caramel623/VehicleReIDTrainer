@@ -1,18 +1,14 @@
-# v0.1.2 安裝驗證修正
+# v0.1.3 原目錄修補
 
-適用已使用 v0.1.1，且套件已安裝、最後驗證出現 60 秒 timeout 的資料夾。
+1. 關閉 VehicleReIDTrainer 與訓練作業。
+2. 將 VehicleReIDTrainer-repair-v0.1.3-win64.zip 解壓到既有 E:\VehicleReIDTrainer，覆蓋程式檔。
+3. 保留 runtime、cache、state、runs、datasets 及使用者資料；環境依賴版本未變更，無需重裝。
+4. 重新啟動，Dataset 頁再次 Validate。
+5. Training 頁可 Resume checkpoint，選擇先前失敗的 run 目錄。這仍是 synthetic smoke，並非正式 dataset 訓練。
 
-1. 關閉舊的 VehicleReIDTrainer 安裝視窗與程式。
-2. 將 VehicleReIDTrainer-repair-v0.1.2-win64.zip 解壓到原安裝目錄，例如 E:\VehicleReIDTrainer，覆蓋 ZIP 內的程式檔。
-3. 保留 runtime、cache、state、models、runs 和 datasets，不要刪除，也不必換新空目錄。
-4. 執行原資料夾的新 VehicleReIDTrainer.exe，按 Install Environment 再驗證。需要 CPU 時須自行勾選允許。
+修正 DatasetManager 使用 reid_crop/plate_mask_bbox 與整數 JSONL image_id 的格式相容性。
+上游未提供 event_id 時會清楚警告，無法完成事件洩漏檢查；見 DATASET.md。
 
-修補 ZIP 不包含 runtime、cache、state 或 configs，不會替換已安裝 Python/PyTorch 或環境 manifest。
-套件版本符合時完全跳過 pip install；CPU 使用授權預設仍關閉。
-
-首次驗證最多 600 秒，每 10 秒顯示仍在進行的步驟。torch 與 torchvision 匯入、CUDA 查詢及
-matrix multiply 在同一個子程序完成，避免反覆載入大型 DLL。持續停留時每 60 秒輸出 Python stack 診斷。
-
-逾時只表示驗證沒有完成，不等於 CUDA 不可用。失敗時保留套件與重試標記；
-將 logs/environment.log 與 state/environment-verification.json 提供給開發者可定位最後步驟。
-不需要因 runtime/Scripts 不在 PATH 的警告而修改系統 PATH，也不需要手動升級 pip。
+針對 status.json 暫時遭 Windows 占用，加入有限次重試；GUI 輪詢僅讀取，
+寫入仍持續失敗時先記錄 traceback，再嘗試 FAILED 狀態。Runs 顯示 train.log 路徑與最後錯誤。
+若持續出現 WinError 5，新紀錄可協助區分暫時鎖定、檔案權限等原因，程式不會擅自變更權限。

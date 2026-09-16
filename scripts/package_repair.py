@@ -7,7 +7,7 @@ import zipfile
 root=Path(__file__).resolve().parents[1]
 version=(root / "VERSION").read_text().strip()
 output=root / "dist" / f"VehicleReIDTrainer-repair-v{version}-win64.zip"
-paths=[root / "dist/VehicleReIDTrainer.exe",root / "VERSION",root / "docs/REPAIR_INSTALL.md"]
+paths=[root / "dist/VehicleReIDTrainer.exe",root / "VERSION",root / "docs/REPAIR_INSTALL.md",root / "docs/DATASET.md"]
 paths+=sorted((root / "app").rglob("*.py"))
 with zipfile.ZipFile(output,"w",zipfile.ZIP_DEFLATED) as archive:
     for path in paths:
